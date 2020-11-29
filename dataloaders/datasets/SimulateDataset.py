@@ -16,7 +16,7 @@ from torch.utils.data import Dataset
 from fnmatch import fnmatch
 from PIL import Image
 from torchvision import transforms
-from dataloaders import custom_transforms as tr
+from dataloaders import custom_transforms_4X as tr
 
 class SimulateRemoteSensing(Dataset):
     """
@@ -25,20 +25,21 @@ class SimulateRemoteSensing(Dataset):
     NUM_CLASSES = 2
 
     def __init__(self,
-                 base_dir,
-                 X_sub_dir,
-                 Y_sub_dir,
+                 X_dir,
+                 Xlr_dir,
+                 Y_dir,
                  patch_size,
-                 SR,
                  to_train
                  ):
         super().__init__()
-        self._image_dir = os.path.join(base_dir,X_sub_dir)
-        self._cat_dir = os.path.join(base_dir, Y_sub_dir)
+        self._image_dir = X_dir
+        self._image_lr_dir = Xlr_dir
+        self._cat_dir = Y_dir
 
         images = [n for n in os.listdir(self._image_dir) if fnmatch(n,'*.tif') or fnmatch(n,'*.tiff')]
 
         self.image_filenames = [os.path.join(self._image_dir,n) for n in images]
+        self.image_lr_filenames = [os.path.join(self._image_lr_dir,n) for n in images]
         self.label_filenames = [os.path.join(self._cat_dir,n) for n in images]
 
         img = Image.open(self.image_filenames[0])
@@ -47,7 +48,7 @@ class SimulateRemoteSensing(Dataset):
         self.num_bands = len(img.split())
         self.patch_size = patch_size
 
-        self.SR = SR
+        self.SR = 4
         self.to_train = to_train
 
     @property
@@ -78,8 +79,8 @@ class SimulateRemoteSensing(Dataset):
         row_idx = int(img_patch_idx / self.patch_cols_per_img)
         col_idx = img_patch_idx % self.patch_cols_per_img
         img = Image.open(filenames[img_idx])
-        bbox = (col_idx*self.patch_size*SR,row_idx*self.patch_size*SR,
-                (col_idx+1)*self.patch_size*SR,(row_idx+1)*self.patch_size*SR)
+        bbox = (int(col_idx*self.patch_size/SR),int(row_idx*self.patch_size/SR),
+                int((col_idx+1)*self.patch_size/SR),int((row_idx+1)*self.patch_size/SR))
         patch_image = img.crop(bbox)
         return patch_image
 
@@ -89,11 +90,11 @@ class SimulateRemoteSensing(Dataset):
     def train_tansform(self,sample):
         composed_transoforms = transforms.Compose([
             transforms.RandomChoice([
-                tr.LosslessRotate(p=0.5),
-                tr.RandomVerticalFlip(p=0.5),
-                tr.RandomHorizontalFlip(p=0.5),
-                tr.RandomTranspose45(p=0.5),
-                tr.RandomTranspose235(p=0.5)
+                tr.LosslessRotate(p=0.75),
+                tr.RandomVerticalFlip(p=0.75),
+                tr.RandomHorizontalFlip(p=0.75),
+                tr.RandomTranspose45(p=0.75),
+                tr.RandomTranspose235(p=0.75)
             ]),
             tr.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             tr.ToTensor()
@@ -109,8 +110,9 @@ class SimulateRemoteSensing(Dataset):
 
     def __getitem__(self, index):
         _img = self._get_patch(self.image_filenames,index,SR=1)
-        _label = self._get_patch(self.label_filenames,index, SR=self.SR)
-        sample = {'image': _img, 'label': _label}
+        _img_lr = self._get_patch(self.image_lr_filenames,index,SR=self.SR)
+        _label = self._get_patch(self.label_filenames,index, SR=1)
+        sample = {'image': _img, 'imageLR': _img_lr, 'label': _label}
         if self.to_train:
             return self.train_tansform(sample)
         else:
@@ -124,11 +126,10 @@ if __name__ == '__main__':
 
 
     voc_train = SimulateRemoteSensing(
-        base_dir=r'F:\Data\MassachusettsBuilding\mass_buildings\train',
-        X_sub_dir='satLR',
-        Y_sub_dir='map',
+        X_dir=r'F:\Data\MassachusettsBuilding\mass_buildings\train\sat',
+        Xlr_dir=r'F:\Data\MassachusettsBuilding\mass_buildings\train\satLR',
+        Y_dir=r'F:\Data\MassachusettsBuilding\mass_buildings\train\map',
         patch_size=128,
-        SR=4,
         to_train=True
     )
 
@@ -137,6 +138,7 @@ if __name__ == '__main__':
     for ii, sample in enumerate(dataloader):
         for jj in range(sample["image"].size()[0]):
             img = sample['image'].numpy()
+            imgLR = sample['imageLR'].numpy()
             gt = sample['label'].numpy()
             tmp = np.array(gt[jj]).astype(np.uint8)
             segmap = decode_segmap(tmp, dataset='pascal')
@@ -145,11 +147,18 @@ if __name__ == '__main__':
             img_tmp += (0.485, 0.456, 0.406)
             img_tmp *= 255.0
             img_tmp = img_tmp.astype(np.uint8)
+            imgLR_tmp = np.transpose(imgLR[jj], axes=[1, 2, 0])
+            imgLR_tmp *= (0.229, 0.224, 0.225)
+            imgLR_tmp += (0.485, 0.456, 0.406)
+            imgLR_tmp *= 255.0
+            imgLR_tmp = imgLR_tmp.astype(np.uint8)
             plt.figure()
             plt.title('display')
-            plt.subplot(211)
+            plt.subplot(311)
             plt.imshow(img_tmp)
-            plt.subplot(212)
+            plt.subplot(312)
+            plt.imshow(imgLR_tmp)
+            plt.subplot(313)
             plt.imshow(segmap)
 
         if ii == 1:
