@@ -4,6 +4,8 @@ import numpy as np
 
 from PIL import Image, ImageOps, ImageFilter
 
+from torchvision import transforms
+
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
     Args:
@@ -47,13 +49,58 @@ class ToTensor(object):
 
 
 class RandomHorizontalFlip(object):
+    def __init__(self,p=0.5):
+        self.p=p
     def __call__(self, sample):
         img = sample['image']
         mask = sample['label']
-        if random.random() < 0.5:
+        if random.random() < self.p:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
             mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
 
+        return {'image': img,
+                'label': mask}
+
+class RandomVerticalFlip(object):
+    def __init__(self,p=0.5):
+        self.p=p
+    def __call__(self, sample):
+        img = sample['image']
+        mask = sample['label']
+        if random.random() < self.p:
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            mask = mask.transpose(Image.FLIP_TOP_BOTTOM)
+
+        return {'image': img,
+                'label': mask}
+
+class RandomTranspose45(object):
+    """45度对角线翻转"""
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, sample):
+        img = sample['image']
+        mask = sample['label']
+        if random.random() < self.p:
+            img = img.transpose(Image.FLIP_TOP_BOTTOM).rotate(270,Image.BILINEAR)
+            mask = mask.transpose(Image.FLIP_TOP_BOTTOM).rotate(270,Image.NEAREST)
+        return {'image': img,
+                'label': mask}
+
+class RandomTranspose235(object):
+    """45度对角线翻转"""
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, sample):
+        img = sample['image']
+        mask = sample['label']
+        if random.random() < self.p:
+            img = img.transpose(Image.FLIP_LEFT_RIGHT).rotate(270,Image.BILINEAR)
+            mask = mask.transpose(Image.FLIP_LEFT_RIGHT).rotate(270,Image.NEAREST)
         return {'image': img,
                 'label': mask}
 
@@ -68,6 +115,24 @@ class RandomRotate(object):
         rotate_degree = random.uniform(-1*self.degree, self.degree)
         img = img.rotate(rotate_degree, Image.BILINEAR)
         mask = mask.rotate(rotate_degree, Image.NEAREST)
+
+        return {'image': img,
+                'label': mask}
+
+
+class LosslessRotate(object):
+    def __init__(self, p=0.5):
+        self.degree = [0,90,180,270]
+        self.p = p
+
+    def __call__(self, sample):
+        img = sample['image']
+        mask = sample['label']
+        if random.random()<self.p:
+            rotate_degree = random.choice(self.degree)
+            if rotate_degree != 0:
+                img = img.rotate(rotate_degree)
+                mask = mask.rotate(rotate_degree)
 
         return {'image': img,
                 'label': mask}
