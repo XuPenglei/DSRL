@@ -102,6 +102,8 @@ class Trainer(object):
         self.model.train()
         tbar = tqdm(self.train_loader)
         num_img_tr = len(self.train_loader)
+        self.evaluator.reset()
+        f1 = 0.0
         for i, sample in enumerate(tbar):
             image, input_img, target = sample['image'], sample['imageLR'], sample['label']
             if self.args.cuda:
@@ -123,10 +125,18 @@ class Trainer(object):
             if i % (num_img_tr // 10) == 0:
                 global_step = i + num_img_tr * epoch
                 self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+            with torch.no_grad():
+                pred = output.data.cpu().numpy()
+                target = target.cpu().numpy()
+                pred = np.argmax(pred, axis=1)
+                self.evaluator.add_batch(target,pred)
+                f1 += self.evaluator.f1()
 
-        self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
+
+        self.writer.add_scalar('train/total_loss_epoch', train_loss/(i+1), epoch)
+        self.writer.add_scalar('train/f1',f1/(i+1), epoch)
         print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
-        print('Loss: %.3f' % train_loss)
+        print('Loss: %.3f; f1: %.3f' % (train_loss/ (i + 1),f1/(i+1)))
 
         if self.args.no_val:
             # save checkpoint every epoch
@@ -145,7 +155,7 @@ class Trainer(object):
                 'optimizer': self.optimizer.state_dict(),
                 'best_pred': self.best_pred,
             }, is_best=False,
-            filename='weights_%d.pth.tar'%(epoch))
+            filename='weights_%d.pth'%(epoch))
 
 
     def validation(self, epoch):
@@ -154,8 +164,8 @@ class Trainer(object):
         tbar = tqdm(self.val_loader, desc='\r')
         test_loss = 0.0
         for i, sample in enumerate(tbar):
-            image, target = sample['image'], sample['label']
-            input_img=torch.nn.functional.interpolate(image,size=[i//2 for i in image.size()[2:]], mode='bilinear', align_corners=True)
+            image, input_img, target = sample['image'], sample['imageLR'], sample['label']
+            # input_img=torch.nn.functional.interpolate(image,size=[i//2 for i in image.size()[2:]], mode='bilinear', align_corners=True)
             if self.args.cuda:
                 input_img, image, target = input_img.cuda(), image.cuda(), target.cuda()
             with torch.no_grad():
@@ -172,17 +182,22 @@ class Trainer(object):
         # Fast test during the training
         Acc = self.evaluator.Pixel_Accuracy()
         Acc_class = self.evaluator.Pixel_Accuracy_Class()
+        f1 = self.evaluator.f1()
+        IoU1 = self.evaluator.IoU1()
         mIoU = self.evaluator.Mean_Intersection_over_Union()
         FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
         self.writer.add_scalar('val/total_loss_epoch', test_loss, epoch)
+        self.writer.add_scalar('val/mean_loss', test_loss/(i+1), epoch)
         self.writer.add_scalar('val/mIoU', mIoU, epoch)
         self.writer.add_scalar('val/Acc', Acc, epoch)
+        self.writer.add_scalar('val/f1',f1,epoch)
+        self.writer.add_scalar('val/IoU1',IoU1,epoch)
         self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
         print('Validation:')
         print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
-        print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
-        print('Loss: %.3f' % test_loss)
+        print("Acc:{}, Acc_class:{}, f1:{}, IoU1:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, f1, IoU1, mIoU, FWIoU))
+        # print('Loss: %.3f' % (test_loss / (i + 1)))
 
         new_pred = mIoU
         if new_pred > self.best_pred:
@@ -197,13 +212,13 @@ class Trainer(object):
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch DeeplabV3Plus Training")
-    parser.add_argument('--backbone', type=str, default='resnet',
+    parser.add_argument('--backbone', type=str, default='xception',
                         choices=['resnet', 'xception', 'drn', 'mobilenet'],
                         help='backbone name (default: resnet)')
     parser.add_argument('--out-stride', type=int, default=16,
                         help='network output stride (default: 8)')
-    parser.add_argument('--dataset', type=str, default='RS',
-                        choices=['pascal', 'coco', 'cityscapes','RS'],
+    parser.add_argument('--dataset', type=str, default='rs',
+                        choices=['pascal', 'coco', 'cityscapes','rs'],
                         help='dataset name (default: pascal)')
     parser.add_argument('--use-sbd', action='store_true', default=True,
                         help='whether to use SBD dataset (default: True)')
@@ -291,7 +306,7 @@ def main():
             'coco': 30,
             'cityscapes': 1000,
             'pascal': 50,
-            'RS': 200
+            'rs': 200
         }
         args.epochs = epoches[args.dataset.lower()]
 
@@ -306,7 +321,7 @@ def main():
             'coco': 0.1,
             'cityscapes': 0.005,
             'pascal': 0.007,
-            'RS': 0.001
+            'rs': 0.001
         }
         args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size
 

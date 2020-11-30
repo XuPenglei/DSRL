@@ -31,6 +31,18 @@ class Evaluator(object):
         FWIoU = (freq[freq > 0] * iu[freq > 0]).sum()
         return FWIoU
 
+    def IoU1(self):
+        return self.confusion_matrix[1,1]/(self.confusion_matrix.sum()-self.confusion_matrix[0,0])
+
+    def f1(self):
+        def idx(cm):
+            epsilon = 1e-10
+            oa = (cm[0, 0] + cm[1, 1]) / (cm.sum() + epsilon)
+            recall = cm[1, 1] / (cm[1, :].sum() + epsilon)
+            precision = cm[1, 1] / (cm[:, 1].sum() + epsilon)
+            return 2 * precision * recall / (precision + recall+epsilon)
+        return idx(self.confusion_matrix)
+
     def _generate_matrix(self, gt_image, pre_image):
         mask = (gt_image >= 0) & (gt_image < self.num_class)
         label = self.num_class * gt_image[mask].astype('int') + pre_image[mask]

@@ -37,19 +37,21 @@ def make_data_loader(args, **kwargs):
         test_loader = None
         return train_loader, val_loader, test_loader, num_class
 
-    elif args.dataset == 'RS':
+    elif args.dataset.lower() == 'rs':
         train_set = SimulateDataset.SimulateRemoteSensing(
-            X_dir=r'',
-            Y_dir='',
-            patch_size=128,
-            SR=4,
+            X_dir=r'F:\Data\Dream-B\train\image',
+            Xlr_dir=r'F:\Data\Dream-B\train\imageLR',
+            Y_dir=r'F:\Data\Dream-B\train\label',
+            patch_size=256,
+            # SR=4,
             to_train=True
         )
         val_set = SimulateDataset.SimulateRemoteSensing(
-            X_dir=r'',
-            Y_dir='',
-            patch_size=128,
-            SR=4,
+            X_dir=r'F:\Data\Dream-B\train\image',
+            Xlr_dir=r'F:\Data\Dream-B\train\imageLR',
+            Y_dir=r'F:\Data\Dream-B\train\label',
+            patch_size=256,
+            # SR=4,
             to_train=False
         )
         num_class = train_set.NUM_CLASSES
