@@ -126,10 +126,10 @@ if __name__ == '__main__':
 
 
     voc_train = SimulateRemoteSensing(
-        X_dir=r'F:\Data\MassachusettsBuilding\mass_buildings\train\sat',
-        Xlr_dir=r'F:\Data\MassachusettsBuilding\mass_buildings\train\satLR',
-        Y_dir=r'F:\Data\MassachusettsBuilding\mass_buildings\train\map',
-        patch_size=128,
+        X_dir=r'F:\Data\Dream-B\train\image',
+        Xlr_dir=r'F:\Data\Dream-B\train\imageLR',
+        Y_dir=r'F:\Data\Dream-B\train\label',
+        patch_size=512,
         to_train=True
     )
 
@@ -141,7 +141,7 @@ if __name__ == '__main__':
             imgLR = sample['imageLR'].numpy()
             gt = sample['label'].numpy()
             tmp = np.array(gt[jj]).astype(np.uint8)
-            segmap = decode_segmap(tmp, dataset='pascal')
+            segmap = decode_segmap(tmp, dataset='rs')
             img_tmp = np.transpose(img[jj], axes=[1, 2, 0])
             img_tmp *= (0.229, 0.224, 0.225)
             img_tmp += (0.485, 0.456, 0.406)
