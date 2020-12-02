@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 import os
 import numpy as np
@@ -92,6 +93,8 @@ class Trainer(object):
             self.best_pred = checkpoint['best_pred']
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
+            if not args.ft:
+                args.start_epoch = checkpoint['epoch']
 
         # Clear start epoch if fine-tuning
         if args.ft:
@@ -311,7 +314,7 @@ def main():
         args.epochs = epoches[args.dataset.lower()]
 
     if args.batch_size is None:
-        args.batch_size = 4 * len(args.gpu_ids)
+        args.batch_size = 32 * len(args.gpu_ids)
 
     if args.test_batch_size is None:
         args.test_batch_size = args.batch_size
@@ -323,8 +326,8 @@ def main():
             'pascal': 0.007,
             'rs': 0.001
         }
-        args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size
-
+        # args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size
+        args.lr = lrs[args.dataset.lower()]
 
     if args.checkname is None:
         args.checkname = 'deeplab-'+str(args.backbone)
