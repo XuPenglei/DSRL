@@ -108,7 +108,12 @@ class Trainer(object):
         self.evaluator.reset()
         f1 = 0.0
         for i, sample in enumerate(tbar):
-            image, input_img, target = sample['image'], sample['imageLR'], sample['label']
+            if self.args.useLR:
+                image, input_img, target = sample['image'], sample['imageLR'], sample['label']
+            else:
+                image, target = sample['image'], sample['label']
+                input_img = torch.nn.functional.interpolate(image, size=[i // 4 for i in image.size()[2:]],
+                                                            mode='bicubic', align_corners=True)
             if self.args.cuda:
                 input_img, image, target = input_img.cuda(), image.cuda(), target.cuda()
             self.scheduler(self.optimizer, i, epoch, self.best_pred)
@@ -288,6 +293,9 @@ def main():
                         help='interval of save checkpoint')
     parser.add_argument('--must-save', type=bool, default=True,
                         help='whether to save mandatory')
+    # dataloader option
+    parser.add_argument('--useLR', type=bool, default=True,
+                        help='whether to use resampled LR data')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()

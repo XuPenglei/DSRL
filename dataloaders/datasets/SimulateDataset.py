@@ -39,7 +39,8 @@ class SimulateRemoteSensing(Dataset):
         images = [n for n in os.listdir(self._image_dir) if fnmatch(n,'*.tif') or fnmatch(n,'*.tiff')]
 
         self.image_filenames = [os.path.join(self._image_dir,n) for n in images]
-        self.image_lr_filenames = [os.path.join(self._image_lr_dir,n) for n in images]
+        if self._image_lr_dir:
+            self.image_lr_filenames = [os.path.join(self._image_lr_dir,n) for n in images]
         self.label_filenames = [os.path.join(self._cat_dir,n) for n in images]
 
         img = Image.open(self.image_filenames[0])
@@ -110,7 +111,10 @@ class SimulateRemoteSensing(Dataset):
 
     def __getitem__(self, index):
         _img = self._get_patch(self.image_filenames,index,SR=1)
-        _img_lr = self._get_patch(self.image_lr_filenames,index,SR=self.SR)
+        if self._image_lr_dir:
+            _img_lr = self._get_patch(self.image_lr_filenames,index,SR=self.SR)
+        else:
+            _img_lr = None
         _label = self._get_patch(self.label_filenames,index, SR=1)
         sample = {'image': _img, 'imageLR': _img_lr, 'label': _label}
         if self.to_train:
