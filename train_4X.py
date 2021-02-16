@@ -9,7 +9,7 @@ from mypath import Path
 from dataloaders import make_data_loader
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 # from modeling.deeplab import *
-from modeling.deeplab_4X import *
+from modeling.deeplab_SP_4X import *
 from utils.loss import SegmentationLosses
 from utils.fa_loss import FALoss
 from utils.calculate_weights import calculate_weigths_labels
@@ -20,6 +20,19 @@ from utils.metrics import Evaluator
 
 w_sr=0.5
 w_fa=0.5
+
+def showimg(img):
+    img_tmp = np.transpose(img, axes=[1, 2, 0])
+    img_tmp *= (0.229, 0.224, 0.225)
+    img_tmp += (0.485, 0.456, 0.406)
+    img_tmp *= 255.0
+    img_tmp = img_tmp.astype(np.uint8)
+    plt.imshow(img_tmp)
+    plt.show()
+
+def showlabel(label):
+    plt.imshow(label)
+    plt.show()
 
 class Trainer(object):
     def __init__(self, args):
@@ -33,15 +46,16 @@ class Trainer(object):
         self.writer = self.summary.create_summary()
         
         # Define Dataloader
-        kwargs = {'num_workers': args.workers, 'pin_memory': True}
+        kwargs = {'num_workers': args.workers, 'pin_memory': True, 'drop_last':True}
         self.train_loader, self.val_loader, self.test_loader, self.nclass = make_data_loader(args, **kwargs)
 
         # Define network
-        model = DeepLab_4X(num_classes=self.nclass,
+        model = DeepLab_SP_4x(num_classes=self.nclass,
                         backbone=args.backbone,
                         output_stride=args.out_stride,
                         sync_bn=args.sync_bn,
-                        freeze_bn=args.freeze_bn)
+                        freeze_bn=args.freeze_bn,
+                        SR=args.SR)
 
         train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},
                         {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]
@@ -68,7 +82,8 @@ class Trainer(object):
         self.evaluator = Evaluator(self.nclass)
         # Define lr scheduler
         self.scheduler = LR_Scheduler(args.lr_scheduler, args.lr,
-                                            args.epochs, len(self.train_loader))
+                                            args.epochs, len(self.train_loader),
+                                      warmup_epochs=args.lr_warmup, one_cycle=args.lr_cycle)
 
         # Using cuda
         if args.cuda:
@@ -107,11 +122,14 @@ class Trainer(object):
         num_img_tr = len(self.train_loader)
         self.evaluator.reset()
         f1 = 0.0
+        iou1 = 0.0
+        self.scheduler(self.optimizer, 0, epoch, self.best_pred)
         for i, sample in enumerate(tbar):
             image, input_img, target = sample['image'], sample['imageLR'], sample['label']
+            # input_img = torch.nn.functional.interpolate(image, size=[i // 4 for i in image.size()[2:]], mode='bicubic',
+            #                                             align_corners=True)
             if self.args.cuda:
                 input_img, image, target = input_img.cuda(), image.cuda(), target.cuda()
-            self.scheduler(self.optimizer, i, epoch, self.best_pred)
             self.optimizer.zero_grad()
             output,output_sr,fea_seg,fea_sr = self.model(input_img)
             # del fea_seg
@@ -125,33 +143,34 @@ class Trainer(object):
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
-            if i % (num_img_tr // 10) == 0:
-                global_step = i + num_img_tr * epoch
-                self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+            # if i % (num_img_tr // 10) == 0:
+            #     global_step = i + num_img_tr * epoch
+            #     self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
             with torch.no_grad():
                 pred = output.data.cpu().numpy()
                 target = target.cpu().numpy()
                 pred = np.argmax(pred, axis=1)
                 self.evaluator.add_batch(target,pred)
                 f1 += self.evaluator.f1()
+                iou1 += self.evaluator.IoU1()
 
 
         self.writer.add_scalar('train/total_loss_epoch', train_loss/(i+1), epoch)
         self.writer.add_scalar('train/f1',f1/(i+1), epoch)
         print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
-        print('Loss: %.3f; f1: %.3f' % (train_loss/ (i + 1),f1/(i+1)))
+        print('Loss: %.3f; f1: %.3f; IoU1: %.3f' % (train_loss/ (i + 1),f1/(i+1), iou1/(i+1)))
 
-        if self.args.no_val:
-            # save checkpoint every epoch
-            is_best = False
-            self.saver.save_checkpoint({
-                'epoch': epoch + 1,
-                'state_dict': self.model.module.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'best_pred': self.best_pred,
-            }, is_best)
+        # if self.args.no_val:
+        #     # save checkpoint every epoch
+        #     is_best = False
+        #     self.saver.save_checkpoint({
+        #         'epoch': epoch + 1,
+        #         'state_dict': self.model.module.state_dict(),
+        #         'optimizer': self.optimizer.state_dict(),
+        #         'best_pred': self.best_pred,
+        #     }, is_best)
 
-        if epoch+1 % self.args.save_interval == 0 and self.args.must_save:
+        if (epoch+1) % self.args.save_interval == 0:
             self.saver.save_checkpoint({
                 'epoch': epoch + 1,
                 'state_dict': self.model.module.state_dict(),
@@ -215,7 +234,7 @@ class Trainer(object):
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch DeeplabV3Plus Training")
-    parser.add_argument('--backbone', type=str, default='xception',
+    parser.add_argument('--backbone', type=str, default='resnet',
                         choices=['resnet', 'xception', 'drn', 'mobilenet'],
                         help='backbone name (default: resnet)')
     parser.add_argument('--out-stride', type=int, default=16,
@@ -243,7 +262,7 @@ def main():
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
                         metavar='N', help='start epochs (default:0)')
-    parser.add_argument('--batch-size', type=int, default=None,
+    parser.add_argument('--batch-size', type=int, default=2,
                         metavar='N', help='input batch size for \
                                 training (default: auto)')
     parser.add_argument('--test-batch-size', type=int, default=None,
@@ -254,9 +273,13 @@ def main():
     # optimizer params
     parser.add_argument('--lr', type=float, default=None, metavar='LR',
                         help='learning rate (default: auto)')
-    parser.add_argument('--lr-scheduler', type=str, default='poly',
+    parser.add_argument('--lr-scheduler', type=str, default='cos',
                         choices=['poly', 'step', 'cos'],
                         help='lr scheduler mode: (default: poly)')
+    parser.add_argument('--lr-warmup', type=int, default=2,
+                        help='lr scheduler warm up epochs: (default: 0)')
+    parser.add_argument('--lr-cycle', type=int, default=5,
+                        help='the epoches of one cycle, default: 0')
     parser.add_argument('--momentum', type=float, default=0.9,
                         metavar='M', help='momentum (default: 0.9)')
     parser.add_argument('--weight-decay', type=float, default=1e-4,
@@ -284,10 +307,13 @@ def main():
                         help='evaluuation interval (default: 1)')
     parser.add_argument('--no-val', action='store_true', default=False,
                         help='skip validation during training')
-    parser.add_argument('--save-interval', type=int, default=10,
+    parser.add_argument('--save-interval', type=int, default=100,
                         help='interval of save checkpoint')
     parser.add_argument('--must-save', type=bool, default=True,
                         help='whether to save mandatory')
+
+    parser.add_argument('--SR', type=int, default=4,
+                        help='SR scale')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -314,7 +340,7 @@ def main():
         args.epochs = epoches[args.dataset.lower()]
 
     if args.batch_size is None:
-        args.batch_size = 32 * len(args.gpu_ids)
+        args.batch_size = 4 * len(args.gpu_ids)
 
     if args.test_batch_size is None:
         args.test_batch_size = args.batch_size
@@ -324,7 +350,7 @@ def main():
             'coco': 0.1,
             'cityscapes': 0.005,
             'pascal': 0.007,
-            'rs': 0.001
+            'rs': 0.01
         }
         # args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size
         args.lr = lrs[args.dataset.lower()]

@@ -6,30 +6,17 @@ from modeling.aspp import build_aspp
 from modeling.decoder import build_decoder
 from modeling.backbone import build_backbone
 from modeling.sr_decoder import build_sr_decoder
+from modeling.deeplab import EDSRConv
 
-class EDSRConv(torch.nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(EDSRConv, self).__init__()
-        self.conv = torch.nn.Sequential(
-            torch.nn.Conv2d(in_ch, out_ch, 3, padding=1),
-            torch.nn.ReLU(inplace=True),
-            torch.nn.Conv2d(out_ch, out_ch, 3, padding=1),
-            )
+import matplotlib.pyplot as plt
+import numpy as np
 
-        self.residual_upsampler = torch.nn.Sequential(
-            torch.nn.Conv2d(in_ch, out_ch, kernel_size=1, bias=False),
-            )
-
-        # self.relu=torch.nn.ReLU(inplace=True)
-
-    def forward(self, input):
-        return self.conv(input)+self.residual_upsampler(input)
-
-
-class DeepLab(nn.Module):
+class DeepLab_SP_4x(nn.Module):
     def __init__(self, backbone='resnet', output_stride=16, num_classes=21,
-                 sync_bn=True, freeze_bn=False):
-        super(DeepLab, self).__init__()
+                 sync_bn=True, freeze_bn=False, SR=4):
+        super(DeepLab_SP_4x, self).__init__()
+
+        self.SR = SR
         if backbone == 'drn':
             output_stride = 8
 
@@ -41,21 +28,22 @@ class DeepLab(nn.Module):
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)
         self.aspp = build_aspp(backbone, output_stride, BatchNorm)
         self.decoder = build_decoder(num_classes, backbone, BatchNorm)
-        self.sr_decoder = build_sr_decoder(num_classes,backbone,BatchNorm)
+        self.sr_decoder = build_sr_decoder(num_classes, backbone, BatchNorm)
         self.pointwise = torch.nn.Sequential(
-            torch.nn.Conv2d(num_classes,3,1),
-            torch.nn.BatchNorm2d(3),  #添加了BN层
+            torch.nn.Conv2d(num_classes, 3, 1),
+            torch.nn.BatchNorm2d(3),  # 添加了BN层
             torch.nn.ReLU(inplace=True)
         )
 
-        self.up_sr_1 = nn.ConvTranspose2d(64, 64, 2, stride=2) 
-        self.up_edsr_1 = EDSRConv(64,64)
-        self.up_sr_2 = nn.ConvTranspose2d(64, 32, 2, stride=2) 
-        self.up_edsr_2 = EDSRConv(32,32)
-        self.up_sr_3 = nn.ConvTranspose2d(32, 16, 2, stride=2) 
-        self.up_edsr_3 = EDSRConv(16,16)
-        self.up_conv_last = nn.Conv2d(16,3,1)
-
+        self.sr_conv = torch.nn.Sequential(
+            torch.nn.Conv2d(64, 64, 5, 1, 2),
+            torch.nn.Tanh(),
+            torch.nn.Conv2d(64, 32, 3, 1, 1),
+            torch.nn.Tanh(),
+            torch.nn.Conv2d(32, 3*self.SR**2, 3, 1, 1),
+            torch.nn.PixelShuffle(self.SR),
+            # torch.nn.Sigmoid()
+        )
 
         self.freeze_bn = freeze_bn
 
@@ -63,21 +51,14 @@ class DeepLab(nn.Module):
         x, low_level_feat = self.backbone(input)
         x = self.aspp(x)
         x_seg = self.decoder(x, low_level_feat)
-        x_sr= self.sr_decoder(x, low_level_feat)
+        x_sr = self.sr_decoder(x, low_level_feat)
         x_seg_up = F.interpolate(x_seg, size=input.size()[2:], mode='bilinear', align_corners=True)
-        x_seg_up = F.interpolate(x_seg_up,size=[2*i for i in input.size()[2:]], mode='bilinear', align_corners=True)
+        x_seg_up = F.interpolate(x_seg_up, size=[self.SR * i for i in input.size()[2:]], mode='bilinear', align_corners=True)
 
-        x_sr_up = self.up_sr_1(x_sr)
-        x_sr_up=self.up_edsr_1(x_sr_up)
+        x_sr_up = F.interpolate(x_sr, size=input.size()[2:], mode='bilinear', align_corners=True)
+        x_sr_up = self.sr_conv(x_sr_up)
 
-        x_sr_up = self.up_sr_2(x_sr_up)
-        x_sr_up=self.up_edsr_2(x_sr_up)
-
-        x_sr_up = self.up_sr_3(x_sr_up)
-        x_sr_up=self.up_edsr_3(x_sr_up)
-        x_sr_up=self.up_conv_last(x_sr_up)
-
-        return x_seg_up,x_sr_up,self.pointwise(x_seg_up),x_sr_up
+        return x_seg_up, x_sr_up, self.pointwise(x_seg_up), x_sr_up
 
     def freeze_bn(self):
         for m in self.modules():
@@ -118,11 +99,11 @@ class DeepLab(nn.Module):
                             if p.requires_grad:
                                 yield p
 
+
 if __name__ == "__main__":
     model = DeepLab(backbone='mobilenet', output_stride=16)
     model.eval()
     input = torch.rand(1, 3, 512, 512)
     output = model(input)
-    print(output.size())
 
 

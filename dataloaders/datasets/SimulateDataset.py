@@ -29,7 +29,8 @@ class SimulateRemoteSensing(Dataset):
                  Xlr_dir,
                  Y_dir,
                  patch_size,
-                 to_train
+                 to_train,
+                 SR
                  ):
         super().__init__()
         self._image_dir = X_dir
@@ -48,7 +49,7 @@ class SimulateRemoteSensing(Dataset):
         self.num_bands = len(img.split())
         self.patch_size = patch_size
 
-        self.SR = 4
+        self.SR = SR
         self.to_train = to_train
 
     @property
@@ -89,13 +90,13 @@ class SimulateRemoteSensing(Dataset):
 
     def train_tansform(self,sample):
         composed_transoforms = transforms.Compose([
-            transforms.RandomChoice([
-                tr.LosslessRotate(p=0.75),
-                tr.RandomVerticalFlip(p=0.75),
-                tr.RandomHorizontalFlip(p=0.75),
-                tr.RandomTranspose45(p=0.75),
-                tr.RandomTranspose235(p=0.75)
-            ]),
+            # transforms.RandomChoice([
+            #     tr.LosslessRotate(p=0.75),
+            #     tr.RandomVerticalFlip(p=0.75),
+            #     tr.RandomHorizontalFlip(p=0.75),
+            #     tr.RandomTranspose45(p=0.75),
+            #     tr.RandomTranspose235(p=0.75)
+            # ]),
             tr.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             tr.ToTensor()
         ])
@@ -130,7 +131,8 @@ if __name__ == '__main__':
         Xlr_dir=r'F:\Data\Dream-B\train\imageLR',
         Y_dir=r'F:\Data\Dream-B\train\label',
         patch_size=512,
-        to_train=True
+        to_train=True,
+        SR=4
     )
 
     dataloader = DataLoader(voc_train, batch_size=5, shuffle=True, num_workers=0)

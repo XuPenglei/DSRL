@@ -37,7 +37,7 @@ class Evaluator(object):
     def f1(self):
         def idx(cm):
             epsilon = 1e-10
-            oa = (cm[0, 0] + cm[1, 1]) / (cm.sum() + epsilon)
+            # oa = (cm[0, 0] + cm[1, 1]) / (cm.sum() + epsilon)
             recall = cm[1, 1] / (cm[1, :].sum() + epsilon)
             precision = cm[1, 1] / (cm[:, 1].sum() + epsilon)
             return 2 * precision * recall / (precision + recall+epsilon)
