@@ -21,15 +21,15 @@ class Normalize(object):
         imgLR = sample['imageLR']
         mask = sample['label']
         img = np.array(img).astype(np.float32)
-        imgLR = np.array(imgLR).astype(np.float32)
         mask = np.array(mask).astype(np.float32)
         img /= 255.0
         img -= self.mean
         img /= self.std
-
-        imgLR /= 255.0
-        imgLR -= self.mean
-        imgLR /= self.std
+        if imgLR is not None:
+            imgLR = np.array(imgLR).astype(np.float32)
+            imgLR /= 255.0
+            imgLR -= self.mean
+            imgLR /= self.std
 
         return {'image': img,
                 'imageLR':imgLR,
@@ -47,12 +47,14 @@ class ToTensor(object):
         imgLR = sample['imageLR']
         mask = sample['label']
         img = np.array(img).astype(np.float32).transpose((2, 0, 1))
-        imgLR = np.array(imgLR).astype(np.float32).transpose((2,0,1))
+
         mask = np.array(mask).astype(np.float32)/255.0
 
         img = torch.from_numpy(img).float()
-        imgLR = torch.from_numpy(imgLR).float()
         mask = torch.from_numpy(mask).float()
+        if imgLR is not None:
+            imgLR = torch.from_numpy(imgLR).float()
+            imgLR = np.array(imgLR).astype(np.float32).transpose((2, 0, 1))
 
         return {'image': img,
                 'imageLR':imgLR,
@@ -68,7 +70,8 @@ class RandomHorizontalFlip(object):
         mask = sample['label']
         if random.random() < self.p:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
-            imgLR = imgLR.transpose(Image.FLIP_LEFT_RIGHT)
+            if imgLR is not None:
+                imgLR = imgLR.transpose(Image.FLIP_LEFT_RIGHT)
             mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
 
         return {'image': img,
@@ -84,7 +87,8 @@ class RandomVerticalFlip(object):
         mask = sample['label']
         if random.random() < self.p:
             img = img.transpose(Image.FLIP_TOP_BOTTOM)
-            imgLR = imgLR.transpose(Image.FLIP_TOP_BOTTOM)
+            if imgLR is not None:
+                imgLR = imgLR.transpose(Image.FLIP_TOP_BOTTOM)
             mask = mask.transpose(Image.FLIP_TOP_BOTTOM)
 
         return {'image': img,
@@ -103,7 +107,8 @@ class RandomTranspose45(object):
         mask = sample['label']
         if random.random() < self.p:
             img = img.transpose(Image.FLIP_TOP_BOTTOM).rotate(270)
-            imgLR = imgLR.transpose(Image.FLIP_TOP_BOTTOM).rotate(270)
+            if imgLR is not None:
+                imgLR = imgLR.transpose(Image.FLIP_TOP_BOTTOM).rotate(270)
             mask = mask.transpose(Image.FLIP_TOP_BOTTOM).rotate(270,Image.NEAREST)
         return {'image': img,
                 'imageLR':imgLR,
@@ -121,7 +126,8 @@ class RandomTranspose235(object):
         mask = sample['label']
         if random.random() < self.p:
             img = img.transpose(Image.FLIP_LEFT_RIGHT).rotate(270)
-            imgLR = imgLR.transpose(Image.FLIP_LEFT_RIGHT).rotate(270)
+            if imgLR is not None:
+                imgLR = imgLR.transpose(Image.FLIP_LEFT_RIGHT).rotate(270)
             mask = mask.transpose(Image.FLIP_LEFT_RIGHT).rotate(270,Image.NEAREST)
         return {'image': img,
                 'imageLR':imgLR,
@@ -140,7 +146,8 @@ class LosslessRotate(object):
             rotate_degree = random.choice(self.degree)
             if rotate_degree != 0:
                 img = img.rotate(rotate_degree)
-                imgLR = imgLR.rotate(rotate_degree)
+                if imgLR is not None:
+                    imgLR = imgLR.rotate(rotate_degree)
                 mask = mask.rotate(rotate_degree)
 
         return {'image': img,
