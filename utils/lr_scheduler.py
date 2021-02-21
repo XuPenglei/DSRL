@@ -67,7 +67,7 @@ class LR_Scheduler(object):
             lr+=1e-5
         assert lr >= 0
         self._adjust_learning_rate(optimizer, lr)
-        print("\n LR is %f now"%(lr))
+        # print("\n LR is %f now"%(lr))
 
     def _adjust_learning_rate(self, optimizer, lr):
         if len(optimizer.param_groups) == 1:

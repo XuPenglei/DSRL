@@ -239,8 +239,8 @@ def main():
                         help='backbone name (default: resnet)')
     parser.add_argument('--out-stride', type=int, default=16,
                         help='network output stride (default: 8)')
-    parser.add_argument('--dataset', type=str, default='rs',
-                        choices=['pascal', 'coco', 'cityscapes','rs'],
+    parser.add_argument('--dataset', type=str, default='rs_dreamb',
+                        choices=['pascal', 'coco', 'cityscapes','rs_ma','rs_dreamb'],
                         help='dataset name (default: pascal)')
     parser.add_argument('--use-sbd', action='store_true', default=True,
                         help='whether to use SBD dataset (default: True)')
@@ -335,7 +335,8 @@ def main():
             'coco': 30,
             'cityscapes': 1000,
             'pascal': 50,
-            'rs': 200
+            'rs_ma': 200,
+            'rs_dreamb': 200
         }
         args.epochs = epoches[args.dataset.lower()]
 
@@ -350,7 +351,8 @@ def main():
             'coco': 0.1,
             'cityscapes': 0.005,
             'pascal': 0.007,
-            'rs': 0.01
+            'rs_ma': 0.01,
+            'rs_dreamb': 0.003
         }
         # args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size
         args.lr = lrs[args.dataset.lower()]

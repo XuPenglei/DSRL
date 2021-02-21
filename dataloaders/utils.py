@@ -27,7 +27,7 @@ def decode_segmap(label_mask, dataset, plot=False):
     elif dataset == 'cityscapes':
         n_classes = 19
         label_colours = get_cityscapes_labels()
-    elif dataset == 'rs':
+    elif dataset == 'rs_ma' or dataset=='rs_dreamb':
         n_classes = 2
         label_colours = get_rs_colors()
     else:

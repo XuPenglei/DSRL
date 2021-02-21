@@ -37,7 +37,7 @@ def make_data_loader(args, **kwargs):
         test_loader = None
         return train_loader, val_loader, test_loader, num_class
 
-    elif args.dataset.lower() == 'rs':
+    elif args.dataset.lower() == 'rs_ma':
         train_set = SimulateDataset.SimulateRemoteSensing(
             # X_dir=r'F:\Data\Dream-B\train\image',
             # Xlr_dir=r'F:\Data\Dream-B\train\imageLR',
@@ -56,6 +56,29 @@ def make_data_loader(args, **kwargs):
             X_dir=r'F:\Data\各数据集小测试\Mass\sat',
             Xlr_dir=r'F:\Data\各数据集小测试\Mass\satLR',
             Y_dir=r'F:\Data\各数据集小测试\Mass\map',
+            patch_size=512,
+            SR=args.SR,
+            to_train=False
+        )
+        num_class = train_set.NUM_CLASSES
+        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, **kwargs)
+        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, **kwargs)
+        test_loader = None
+        return train_loader, val_loader, test_loader, num_class
+
+    elif args.dataset.lower() == 'rs_dreamb':
+        train_set = SimulateDataset.SimulateRemoteSensing(
+            X_dir=r'/home/tang/桌面/XPL/data/data/train/image',
+            Xlr_dir=r'/home/tang/桌面/XPL/data/data/trainLR/image',
+            Y_dir=r'/home/tang/桌面/XPL/data/data/train/label',
+            patch_size=512,
+            SR=args.SR,
+            to_train=True
+        )
+        val_set = SimulateDataset.SimulateRemoteSensing(
+            X_dir=r'/home/tang/桌面/XPL/data/data/valid/image',
+            Xlr_dir=r'/home/tang/桌面/XPL/data/data/validLR/image',
+            Y_dir=r'/home/tang/桌面/XPL/data/data/valid/label',
             patch_size=512,
             SR=args.SR,
             to_train=False
